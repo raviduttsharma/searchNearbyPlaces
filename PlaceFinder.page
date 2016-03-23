@@ -1,0 +1,131 @@
+<!-- Define docType as html-5.0 as it is supports location service which is needed to find current location of user -->
+<apex:page controller="PlaceFinderController" docType="html-5.0">
+
+<style>
+.statusStyle {
+    background:url(/img/loading.gif) no-repeat 0 0; 
+    padding-left:20px; 
+    margin-left:10px; 
+    padding-bottom:5px; 
+}
+#map{
+    height: 100%;
+    width: 70%;
+    margin: 0px;
+    padding: 100px;
+}
+</style>
+
+<apex:form>
+ <!-- Give a fake id in renrender attibute of action function so that page refresh does not go in a loop -->
+    <apex:actionFunction name="passLatLngtoCont" rerender="fakeIdToAvoidPageRefresh" status="loading">
+  <!-- Blank value attribute that will take in any value which the caller will pass and assign it to  latLng variable present in controller-->
+  <apex:param value="" name="latLng" assignTo="{!latLng}"/>
+ </apex:actionFunction>
+ 
+ <apex:pageBlock >
+        
+  <!-- Page block section to show current location and google map -->  
+  <apex:pageBlockSection title="Your current location" columns="1">
+   <div id="location"></div>
+   <div id="map"></div>
+  </apex:pageBlockSection>
+  
+  <!-- Page block section to show search options -->  
+  <apex:pageBlockSection title="Search Options" columns="2">
+   <apex:outputText >Search Options</apex:outputText>
+   <apex:selectList value="{!selectedOption}" size="1">
+    <apex:selectOptions value="{!options}"></apex:selectOptions>
+   </apex:selectList>
+   <apex:commandButton action="{!search}" title="Search" value="Search" status="loading"/>
+   <apex:actionStatus id="loading" startText=" Processing..." startStyleClass="statusStyle"/>
+  </apex:pageBlockSection>
+  
+  <!-- Page block section to show search results -->  
+  <apex:pageblockSection title="Search Results" rendered="{!showResults}">
+   <apex:pageBlockTable value="{!tableDataList}" var="results">
+    <apex:column value="{!results.name}" title="Name" headerValue="Name"/>
+    <apex:column value="{!results.vicinity}" title="Address" headerValue="Address"/>
+   </apex:pageBlockTable>
+  </apex:pageblockSection>
+  
+  <!-- Page block section to be rendered when no search results are found -->
+  <apex:outputPanel rendered="{!showMessage}">No search results found in 3km radius</apex:outputPanel>
+  
+    </apex:pageBlock>
+</apex:form>
+    
+    <!-- Import required JS libs -->
+    <script src="https://maps.googleapis.com/maps/api/js?sensor=false" type="text/javascript"></script>
+    <script src="/assets/gmap3.js?body=1" type="text/javascript"></script>
+    
+ <!-- JavaScript to get the user's current location, and pre-fill -->
+ <script>
+        var x = document.getElementById("location");
+        var geocoder = new google.maps.Geocoder();
+        var latlng;
+  
+  <!-- Function to get the user's current location -->
+        window.onload=function getLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(showPosition);
+            } else { 
+                x.innerHTML = "Geolocation is not supported by this browser.";
+            }
+        }
+  
+  <!-- Function to add info window on google map -->
+        function addInfoWindow(map,marker,text){
+            var infowindow = new google.maps.InfoWindow({
+                content: text
+            });
+            google.maps.event.addListener(marker, 'click', function() {
+                infowindow.open(map,marker);
+            });
+        }
+  
+  <!-- Function to create map and plot markers on it -->
+        function showPosition(position) {
+            <!-- Get address from lat lng -->
+            latlng = new google.maps.LatLng(position.coords.latitude,position.coords.longitude);
+            geocoder.geocode({'latLng': latlng}, function(results, status) {
+                if (status == google.maps.GeocoderStatus.OK) {
+                  if (results[1]) {
+                    x.innerHTML=results[1].formatted_address;
+                    var map;
+                    map = new google.maps.Map(document.getElementById("map"), {
+                    zoom: 13,
+                    center: {lat: position.coords.latitude, lng: position.coords.longitude}
+                    });
+                    
+                    var myLatlng = new google.maps.LatLng(position.coords.latitude,position.coords.longitude);
+                    var marker = new google.maps.Marker({
+                        position: myLatlng,
+                        map: map,
+                        title: 'Your location'
+                    });
+                      
+                    var markerList = '{!tableDataListJSONFormatted}';
+                    var records = JSON.parse(markerList);
+                    for(var i=0;i<records.length;i++){
+                          
+                          var myLatlng = new google.maps.LatLng(records[i].latitude,records[i].longitude);
+                          var marker = new google.maps.Marker({
+                              position: myLatlng,
+                              map: map,
+                              title: records[i].name
+                          });
+                          addInfoWindow(map,marker,records[i].name+records[i].vicinity);
+                    }
+                  } else {
+                    alert('No results found');
+                  }
+                } else {
+                  alert('Geocoder failed due to: ' + status);
+                }
+           });
+     <!-- Call action function which will pass current location lat and lng to apex controller -->
+           passLatLngtoCont(position.coords.latitude+','+position.coords.longitude);
+        }
+    </script>
+</apex:page>
